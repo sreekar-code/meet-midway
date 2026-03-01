@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meet Midway — Find the perfect spot between you and your friend</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:           #FDF6EC;
+      --surface:      #FFFFFF;
+      --primary:      #4A2511;
+      --primary-h:    #6B3A1F;
+      --accent:       #C07830;
+      --accent-light: #F5E8D5;
+      --text:         #2D1A0E;
+      --text-muted:   #8B6B50;
+      --border:       #E2CDB8;
+      --shadow:       rgba(74, 37, 17, 0.10);
+      --shadow-md:    rgba(74, 37, 17, 0.16);
+      --green:        #15803D;
+      --blue:         #1D4ED8;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--primary);
+      color: #fff;
+      text-align: center;
+      padding: 2.25rem 1rem 2rem;
+    }
+    header h1 {
+      font-size: 2.6rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      line-height: 1;
+      margin-bottom: 0.45rem;
+    }
+    header h1 .mid { color: var(--accent); }
+    .tagline {
+      font-size: 1rem;
+      opacity: 0.78;
+      font-weight: 400;
+    }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+
+    /* ── Input card ── */
+    .input-card {
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 1.75rem 2rem;
+      box-shadow: 0 2px 24px var(--shadow);
+      margin-bottom: 1.5rem;
+    }
+    .inputs-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .input-group label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* ── Autocomplete ── */
+    .ac-wrap { position: relative; }
+    .ac-wrap input {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.97rem;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.18s;
+    }
+    .ac-wrap input:focus { border-color: var(--accent); }
+    .ac-wrap input.confirmed {
+      border-color: var(--green);
+      background: #F0FFF4;
+    }
+
+    .dropdown {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      box-shadow: 0 8px 28px var(--shadow-md);
+      z-index: 999;
+      overflow: hidden;
+      display: none;
+    }
+    .dropdown.open { display: block; }
+    .dd-item {
+      padding: 0.65rem 1rem;
+      cursor: pointer;
+      border-bottom: 1px solid #F5EDE0;
+      transition: background 0.13s;
+    }
+    .dd-item:last-child { border-bottom: none; }
+    .dd-item:hover { background: var(--accent-light); }
+    .dd-name { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+    .dd-detail { font-size: 0.76rem; color: var(--text-muted); margin-top: 1px; line-height: 1.3; }
+    .dd-empty { padding: 0.7rem 1rem; font-size: 0.87rem; color: var(--text-muted); }
+
+    /* ── Button ── */
+    .find-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.1s;
+    }
+    .find-btn:hover:not(:disabled) { background: var(--primary-h); }
+    .find-btn:active:not(:disabled) { transform: scale(0.99); }
+    .find-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Status bar ── */
+    #status {
+      text-align: center;
+      min-height: 2rem;
+      font-size: 0.93rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    #status.error { color: #B91C1C; }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2.5px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results grid ── */
+    .results {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    .hidden { display: none !important; }
+
+    /* ── Map ── */
+    #map {
+      height: 520px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 20px var(--shadow);
+    }
+
+    /* ── Cafe list ── */
+    .list-header {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.85rem;
+    }
+    .list-header .count {
+      color: var(--text-muted);
+      font-weight: 400;
+      font-size: 0.85rem;
+    }
+    .cafe-list { display: flex; flex-direction: column; gap: 0.65rem; }
+
+    .cafe-card {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.9rem 1.1rem;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      box-shadow: 0 1px 6px var(--shadow);
+      transition: transform 0.14s, box-shadow 0.14s, border-color 0.14s;
+    }
+    .cafe-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 18px var(--shadow-md);
+      border-color: var(--accent);
+    }
+    .cafe-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.2rem;
+    }
+    .cafe-name {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .cafe-dist {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: var(--accent-light);
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .cafe-type {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+      text-transform: capitalize;
+    }
+    .cafe-addr {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+      line-height: 1.4;
+    }
+    .maps-hint {
+      font-size: 0.72rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .no-results {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 860px) {
+      .results {
+        grid-template-columns: 1fr;
+      }
+      #map { order: -1; height: 380px; }
+    }
+    @media (max-width: 600px) {
+      .inputs-row { grid-template-columns: 1fr; }
+      header h1 { font-size: 2rem; }
+      .input-card { padding: 1.25rem 1rem; }
+      main { padding: 1.25rem 0.75rem 2.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Meet <span class="mid">Midway</span></h1>
+  <p class="tagline">Find the perfect spot between you and your friend</p>
+</header>
+
+<main>
+  <div class="input-card">
+    <div class="inputs-row">
+      <div class="input-group">
+        <label for="loc1">Your Location</label>
+        <div class="ac-wrap">
+          <input id="loc1" type="text" placeholder="Search your location…" autocomplete="off" spellcheck="false" />
+          <div id="dd1" class="dropdown"></div>
+        </div>
+      </div>
+      <div class="input-group">
+        <label for="loc2">Friend's Location</label>
+        <div class="ac-wrap">
+          <input id="loc2" type="text" placeholder="Search friend's location…" autocomplete="off" spellcheck="false" />
+          <div id="dd2" class="dropdown"></div>
+        </div>
+      </div>
+    </div>
+    <button class="find-btn" id="findBtn" disabled>Find Cafes</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="results" class="results hidden">
+    <div id="map"></div>
+    <div id="cafeList"></div>
+  </div>
+</main>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  const sel = { loc1: null, loc2: null };
+  let leafletMap = null;
+
+  // ── DOM refs ───────────────────────────────────────────────────────────────
+  const inp1    = document.getElementById('loc1');
+  const inp2    = document.getElementById('loc2');
+  const dd1     = document.getElementById('dd1');
+  const dd2     = document.getElementById('dd2');
+  const findBtn = document.getElementById('findBtn');
+  const statusEl= document.getElementById('status');
+  const resultsEl= document.getElementById('results');
+  const cafeListEl= document.getElementById('cafeList');
+
+  // ── Utilities ──────────────────────────────────────────────────────────────
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2
+            + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+            * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function fmtDist(m) {
+    return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function setStatus(html, isError = false) {
+    statusEl.className = isError ? 'error' : '';
+    statusEl.innerHTML = html;
+  }
+
+  // ── Autocomplete ───────────────────────────────────────────────────────────
+  function setupAC(input, dropdown, key) {
+    const doFetch = debounce(async (q) => {
+      if (q.length < 3) { closeDD(dropdown); return; }
+      try {
+        const url = `https://nominatim.openstreetmap.org/search`
+          + `?q=${encodeURIComponent(q)}&format=json&limit=5&countrycodes=in`;
+        // Note: browsers block setting User-Agent via fetch; the browser's
+        // own User-Agent is sent automatically which satisfies Nominatim.
+        const res = await fetch(url);
+        if (!res.ok) return;
+        renderDD(await res.json(), dropdown, input, key);
+      } catch (_) { /* silently ignore network errors in autocomplete */ }
+    }, 300);
+
+    input.addEventListener('input', () => {
+      sel[key] = null;
+      input.classList.remove('confirmed');
+      updateBtn();
+      doFetch(input.value.trim());
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeDD(dropdown);
+    });
+  }
+
+  function renderDD(results, dropdown, input, key) {
+    if (!results.length) {
+      dropdown.innerHTML = '<div class="dd-empty">No results found</div>';
+      dropdown.classList.add('open');
+      return;
+    }
+
+    dropdown.innerHTML = results.map((r, i) => {
+      const parts  = r.display_name.split(', ');
+      const name   = parts.slice(0, 2).join(', ');
+      const detail = parts.slice(2, 5).join(', ');
+      return `<div class="dd-item" data-i="${i}">
+        <div class="dd-name">${esc(name)}</div>
+        ${detail ? `<div class="dd-detail">${esc(detail)}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    dropdown.classList.add('open');
+
+    dropdown.querySelectorAll('.dd-item').forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // keep focus on input so blur doesn't fire first
+        const r     = results[i];
+        const parts = r.display_name.split(', ');
+        input.value = parts.slice(0, 2).join(', ');
+        input.classList.add('confirmed');
+        sel[key] = { lat: parseFloat(r.lat), lng: parseFloat(r.lon), label: input.value };
+        closeDD(dropdown);
+        updateBtn();
+      });
+    });
+  }
+
+  function closeDD(dropdown) {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+  }
+
+  // Close all dropdowns when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.ac-wrap')) {
+      closeDD(dd1);
+      closeDD(dd2);
+    }
+  });
+
+  function updateBtn() {
+    findBtn.disabled = !(sel.loc1 && sel.loc2);
+  }
+
+  setupAC(inp1, dd1, 'loc1');
+  setupAC(inp2, dd2, 'loc2');
+
+  // ── Find Cafes ─────────────────────────────────────────────────────────────
+  findBtn.addEventListener('click', findCafes);
+
+  async function findCafes() {
+    if (!sel.loc1 || !sel.loc2) return;
+
+    findBtn.disabled = true;
+    resultsEl.classList.add('hidden');
+    setStatus('<span class="spinner"></span> Finding cafes near your midpoint…');
+
+    try {
+      const mid = {
+        lat: (sel.loc1.lat + sel.loc2.lat) / 2,
+        lng: (sel.loc1.lng + sel.loc2.lng) / 2,
+      };
+
+      // Overpass: cafes + restaurants within 2 km of midpoint (nodes only)
+      const query = `[out:json][timeout:25];`
+        + `(`
+        + `node["amenity"="cafe"](around:2000,${mid.lat},${mid.lng});`
+        + `node["amenity"="restaurant"](around:2000,${mid.lat},${mid.lng});`
+        + `);out body;`;
+
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      });
+
+      if (!resp.ok) throw new Error(`Overpass responded ${resp.status}`);
+
+      const data  = await resp.json();
+      const nodes = (data.elements || []);
+
+      // Compute distances, sort, cap at 10
+      nodes.forEach(n => { n._dist = haversine(mid.lat, mid.lng, n.lat, n.lon); });
+      nodes.sort((a, b) => a._dist - b._dist);
+      const cafes = nodes.slice(0, 10);
+
+      setStatus('');
+      resultsEl.classList.remove('hidden');
+
+      // Leaflet needs the div to be visible before init
+      requestAnimationFrame(() => {
+        initMap(mid, cafes);
+        renderList(cafes);
+      });
+
+    } catch (err) {
+      console.error(err);
+      setStatus('Something went wrong fetching cafes. Please try again.', true);
+    } finally {
+      findBtn.disabled = false;
+    }
+  }
+
+  // ── Map ────────────────────────────────────────────────────────────────────
+  function divIcon(bg, label) {
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        background:${bg};width:36px;height:36px;border-radius:50%;
+        border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.32);
+        display:flex;align-items:center;justify-content:center;
+        font-size:14px;font-weight:800;color:#fff;line-height:1;
+        font-family:system-ui,sans-serif;
+      ">${label}</div>`,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -22],
+    });
+  }
+
+  function mapsUrl(lat, lon) {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+  }
+
+  function initMap(mid, cafes) {
+    if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+
+    leafletMap = L.map('map').setView([mid.lat, mid.lng], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(leafletMap);
+
+    // Person A marker (blue)
+    L.marker([sel.loc1.lat, sel.loc1.lng], { icon: divIcon('#1D4ED8', 'A') })
+      .addTo(leafletMap)
+      .bindPopup(`<b>Your Location</b><br>${esc(sel.loc1.label)}`);
+
+    // Person B marker (green)
+    L.marker([sel.loc2.lat, sel.loc2.lng], { icon: divIcon('#15803D', 'B') })
+      .addTo(leafletMap)
+      .bindPopup(`<b>Friend's Location</b><br>${esc(sel.loc2.label)}`);
+
+    // Midpoint marker (amber)
+    L.marker([mid.lat, mid.lng], { icon: divIcon('#B45309', '★') })
+      .addTo(leafletMap)
+      .bindPopup('<b>Midpoint</b>');
+
+    // Cafe markers (coffee brown)
+    cafes.forEach(c => {
+      const name = c.tags?.name || 'Unnamed Cafe';
+      const url  = mapsUrl(c.lat, c.lon);
+      L.marker([c.lat, c.lon], { icon: divIcon('#7C3A0A', '☕') })
+        .addTo(leafletMap)
+        .bindPopup(`<b>${esc(name)}</b><br><a href="${url}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
+    });
+
+    // Fit all markers into view
+    const allPts = [
+      [sel.loc1.lat, sel.loc1.lng],
+      [sel.loc2.lat, sel.loc2.lng],
+      [mid.lat,       mid.lng],
+      ...cafes.map(c => [c.lat, c.lon]),
+    ];
+    leafletMap.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
+  }
+
+  // ── Cafe list ──────────────────────────────────────────────────────────────
+  function renderList(cafes) {
+    if (!cafes.length) {
+      cafeListEl.innerHTML = `<div class="no-results">
+        ☕ No cafes found nearby.<br>Try a different meeting point.
+      </div>`;
+      return;
+    }
+
+    const cards = cafes.map(c => {
+      const tags = c.tags || {};
+      const name = tags.name || 'Unnamed Cafe';
+      const type = tags.amenity === 'cafe' ? 'Cafe' : 'Restaurant';
+      const url  = mapsUrl(c.lat, c.lon);
+
+      // Build address from OSM tags
+      const addrParts = [
+        tags['addr:housenumber'] && tags['addr:street']
+          ? `${tags['addr:housenumber']} ${tags['addr:street']}`
+          : tags['addr:street'],
+        tags['addr:suburb'] || tags['addr:neighbourhood'],
+        tags['addr:city'],
+      ].filter(Boolean);
+      const addr = addrParts.join(', ');
+
+      return `<a class="cafe-card" href="${url}" target="_blank" rel="noopener noreferrer">
+        <div class="cafe-row">
+          <div class="cafe-name">${esc(name)}</div>
+          <div class="cafe-dist">${fmtDist(c._dist)}</div>
+        </div>
+        <div class="cafe-type">${esc(type)}</div>
+        ${addr ? `<div class="cafe-addr">📍 ${esc(addr)}</div>` : ''}
+        <div class="maps-hint">↗ Open in Google Maps</div>
+      </a>`;
+    }).join('');
+
+    cafeListEl.innerHTML = `
+      <div class="list-header">
+        Nearby Cafes <span class="count">(${cafes.length} found)</span>
+      </div>
+      <div class="cafe-list">${cards}</div>
+    `;
+  }
+</script>
+</body>
+</html>
