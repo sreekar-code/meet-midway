@@ -477,7 +477,7 @@
       // Geoapify Places API — catering.cafe + catering.coffee_shop categories
       // Note: filter uses lon,lat order (GeoJSON)
       const geoUrl = `https://api.geoapify.com/v2/places`
-        + `?categories=catering.cafe,catering.coffee_shop`
+        + `?categories=catering.cafe`
         + `&filter=circle:${mid.lng},${mid.lat},2000`
         + `&limit=20`
         + `&apiKey=${apiKey}`;
