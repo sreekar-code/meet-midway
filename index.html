@@ -385,6 +385,15 @@
   const resultsEl= document.getElementById('results');
   const cafeListEl= document.getElementById('cafeList');
 
+  // ── Persist API key in localStorage ───────────────────────────────────────
+  const STORAGE_KEY = 'meetmidway_fsq_key';
+  fsqKeyEl.value = localStorage.getItem(STORAGE_KEY) || '';
+  fsqKeyEl.addEventListener('change', () => {
+    const v = fsqKeyEl.value.trim();
+    if (v) localStorage.setItem(STORAGE_KEY, v);
+    else   localStorage.removeItem(STORAGE_KEY);
+  });
+
   // ── Utilities ──────────────────────────────────────────────────────────────
   function debounce(fn, ms) {
     let t;
