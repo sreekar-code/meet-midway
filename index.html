@@ -468,7 +468,6 @@
       const query = `[out:json][timeout:25];`
         + `(`
         + `node["amenity"="cafe"](around:2000,${mid.lat},${mid.lng});`
-        + `node["amenity"="restaurant"](around:2000,${mid.lat},${mid.lng});`
         + `);out body;`;
 
       const resp = await fetch('https://overpass-api.de/api/interpreter', {
@@ -581,7 +580,7 @@
     const cards = cafes.map(c => {
       const tags = c.tags || {};
       const name = tags.name || 'Unnamed Cafe';
-      const type = tags.amenity === 'cafe' ? 'Cafe' : 'Restaurant';
+      const type = 'Cafe';
       const url  = mapsUrl(c.lat, c.lon);
 
       // Build address from OSM tags
