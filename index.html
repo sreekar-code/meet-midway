@@ -271,6 +271,48 @@
       line-height: 1.6;
     }
 
+    /* ── API key row ── */
+    .api-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      padding: 0.8rem 1rem;
+      background: var(--accent-light);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .api-row label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .api-row input {
+      flex: 1;
+      min-width: 180px;
+      padding: 0.45rem 0.75rem;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.88rem;
+      font-family: ui-monospace, monospace;
+      background: white;
+      outline: none;
+      color: var(--text);
+    }
+    .api-row input:focus { border-color: var(--accent); }
+    .api-link {
+      font-size: 0.78rem;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .api-link:hover { text-decoration: underline; }
+
     /* ── Responsive ── */
     @media (max-width: 860px) {
       .results {
@@ -311,6 +353,11 @@
         </div>
       </div>
     </div>
+    <div class="api-row">
+      <label for="fsqKey">Foursquare API Key</label>
+      <input id="fsqKey" type="password" placeholder="Paste your free Foursquare API key…" autocomplete="off" spellcheck="false" />
+      <a class="api-link" href="https://foursquare.com/developers/home" target="_blank" rel="noopener">Get a free key ↗</a>
+    </div>
     <button class="find-btn" id="findBtn" disabled>Find Cafes</button>
   </div>
 
@@ -328,12 +375,13 @@
   let leafletMap = null;
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
-  const inp1    = document.getElementById('loc1');
-  const inp2    = document.getElementById('loc2');
-  const dd1     = document.getElementById('dd1');
-  const dd2     = document.getElementById('dd2');
-  const findBtn = document.getElementById('findBtn');
-  const statusEl= document.getElementById('status');
+  const inp1     = document.getElementById('loc1');
+  const inp2     = document.getElementById('loc2');
+  const dd1      = document.getElementById('dd1');
+  const dd2      = document.getElementById('dd2');
+  const fsqKeyEl = document.getElementById('fsqKey');
+  const findBtn  = document.getElementById('findBtn');
+  const statusEl = document.getElementById('status');
   const resultsEl= document.getElementById('results');
   const cafeListEl= document.getElementById('cafeList');
 
@@ -454,6 +502,12 @@
   async function findCafes() {
     if (!sel.loc1 || !sel.loc2) return;
 
+    const apiKey = fsqKeyEl.value.trim();
+    if (!apiKey) {
+      setStatus('Please paste your Foursquare API key above.', true);
+      return;
+    }
+
     findBtn.disabled = true;
     resultsEl.classList.add('hidden');
     setStatus('<span class="spinner"></span> Finding cafes near your midpoint…');
@@ -464,27 +518,27 @@
         lng: (sel.loc1.lng + sel.loc2.lng) / 2,
       };
 
-      // Overpass: cafes + restaurants within 2 km of midpoint (nodes only)
-      const query = `[out:json][timeout:25];`
-        + `(`
-        + `node["amenity"="cafe"](around:2000,${mid.lat},${mid.lng});`
-        + `);out body;`;
+      // Foursquare Places API v3
+      // Categories: 13032 = Café, 13034 = Coffee Roaster, 13035 = Coffee Shop
+      const fsqUrl = `https://api.foursquare.com/v3/places/search`
+        + `?ll=${mid.lat},${mid.lng}`
+        + `&radius=2000`
+        + `&categories=13032,13034,13035`
+        + `&limit=10`
+        + `&sort=DISTANCE`;
 
-      const resp = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
+      const resp = await fetch(fsqUrl, {
+        headers: {
+          'Authorization': apiKey,
+          'Accept': 'application/json',
+        },
       });
 
-      if (!resp.ok) throw new Error(`Overpass responded ${resp.status}`);
+      if (resp.status === 401) throw new Error('invalid_key');
+      if (!resp.ok) throw new Error(`Foursquare responded ${resp.status}`);
 
       const data  = await resp.json();
-      const nodes = (data.elements || []);
-
-      // Compute distances, sort, cap at 10
-      nodes.forEach(n => { n._dist = haversine(mid.lat, mid.lng, n.lat, n.lon); });
-      nodes.sort((a, b) => a._dist - b._dist);
-      const cafes = nodes.slice(0, 10);
+      const cafes = data.results || [];
 
       setStatus('');
       resultsEl.classList.remove('hidden');
@@ -492,12 +546,16 @@
       // Leaflet needs the div to be visible before init
       requestAnimationFrame(() => {
         initMap(mid, cafes);
-        renderList(cafes);
+        renderList(cafes, mid);
       });
 
     } catch (err) {
       console.error(err);
-      setStatus('Something went wrong fetching cafes. Please try again.', true);
+      if (err.message === 'invalid_key') {
+        setStatus('Invalid API key. Check your Foursquare key and try again.', true);
+      } else {
+        setStatus('Something went wrong fetching cafes. Please try again.', true);
+      }
     } finally {
       findBtn.disabled = false;
     }
@@ -549,11 +607,13 @@
       .addTo(leafletMap)
       .bindPopup('<b>Midpoint</b>');
 
-    // Cafe markers (coffee brown)
+    // Cafe markers (coffee brown) — Foursquare uses geocodes.main.latitude/longitude
     cafes.forEach(c => {
-      const name = c.tags?.name || 'Unnamed Cafe';
-      const url  = mapsUrl(c.lat, c.lon);
-      L.marker([c.lat, c.lon], { icon: divIcon('#7C3A0A', '☕') })
+      const lat  = c.geocodes.main.latitude;
+      const lon  = c.geocodes.main.longitude;
+      const name = c.name || 'Unnamed Cafe';
+      const url  = mapsUrl(lat, lon);
+      L.marker([lat, lon], { icon: divIcon('#7C3A0A', '☕') })
         .addTo(leafletMap)
         .bindPopup(`<b>${esc(name)}</b><br><a href="${url}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
     });
@@ -563,13 +623,13 @@
       [sel.loc1.lat, sel.loc1.lng],
       [sel.loc2.lat, sel.loc2.lng],
       [mid.lat,       mid.lng],
-      ...cafes.map(c => [c.lat, c.lon]),
+      ...cafes.map(c => [c.geocodes.main.latitude, c.geocodes.main.longitude]),
     ];
     leafletMap.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
   }
 
   // ── Cafe list ──────────────────────────────────────────────────────────────
-  function renderList(cafes) {
+  function renderList(cafes, mid) {
     if (!cafes.length) {
       cafeListEl.innerHTML = `<div class="no-results">
         ☕ No cafes found nearby.<br>Try a different meeting point.
@@ -578,25 +638,18 @@
     }
 
     const cards = cafes.map(c => {
-      const tags = c.tags || {};
-      const name = tags.name || 'Unnamed Cafe';
-      const type = 'Cafe';
-      const url  = mapsUrl(c.lat, c.lon);
-
-      // Build address from OSM tags
-      const addrParts = [
-        tags['addr:housenumber'] && tags['addr:street']
-          ? `${tags['addr:housenumber']} ${tags['addr:street']}`
-          : tags['addr:street'],
-        tags['addr:suburb'] || tags['addr:neighbourhood'],
-        tags['addr:city'],
-      ].filter(Boolean);
-      const addr = addrParts.join(', ');
+      const lat  = c.geocodes.main.latitude;
+      const lon  = c.geocodes.main.longitude;
+      const name = c.name || 'Unnamed Cafe';
+      const type = c.categories?.[0]?.name || 'Cafe';
+      const addr = c.location?.formatted_address || c.location?.address || '';
+      const dist = c.distance ?? haversine(mid.lat, mid.lng, lat, lon);
+      const url  = mapsUrl(lat, lon);
 
       return `<a class="cafe-card" href="${url}" target="_blank" rel="noopener noreferrer">
         <div class="cafe-row">
           <div class="cafe-name">${esc(name)}</div>
-          <div class="cafe-dist">${fmtDist(c._dist)}</div>
+          <div class="cafe-dist">${fmtDist(dist)}</div>
         </div>
         <div class="cafe-type">${esc(type)}</div>
         ${addr ? `<div class="cafe-addr">📍 ${esc(addr)}</div>` : ''}
