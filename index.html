@@ -325,7 +325,7 @@
 
 <script>
   // ── Config ─────────────────────────────────────────────────────────────────
-  const FSQ_API_KEY = 'PYPHW4XSRPDOU41WWQM3CWPSPH0YDWQDZOMWEF1SKVGPARSV';
+  const HERE_API_KEY = 'PASTE_YOUR_HERE_KEY_HERE';
 
   // ── State ──────────────────────────────────────────────────────────────────
   const sel = { loc1: null, loc2: null };
@@ -458,9 +458,9 @@
   async function findCafes() {
     if (!sel.loc1 || !sel.loc2) return;
 
-    const apiKey = FSQ_API_KEY;
-    if (!apiKey) {
-      setStatus('API key not configured. Add it to config.js.', true);
+    const apiKey = HERE_API_KEY;
+    if (!apiKey || apiKey.startsWith('PASTE')) {
+      setStatus('HERE API key not configured.', true);
       return;
     }
 
@@ -474,27 +474,20 @@
         lng: (sel.loc1.lng + sel.loc2.lng) / 2,
       };
 
-      // Foursquare Places API v3
-      // Categories: 13032 = Café, 13034 = Coffee Roaster, 13035 = Coffee Shop
-      const fsqUrl = `https://api.foursquare.com/v3/places/search`
-        + `?ll=${mid.lat},${mid.lng}`
-        + `&radius=2000`
-        + `&categories=13032,13034,13035`
+      // HERE Discover API — category 200-2200-0000 = Coffee/Tea
+      const hereUrl = `https://discover.search.hereapi.com/v1/discover`
+        + `?at=${mid.lat},${mid.lng}`
+        + `&categories=200-2200-0000`
         + `&limit=10`
-        + `&sort=DISTANCE`;
+        + `&apiKey=${apiKey}`;
 
-      const resp = await fetch(fsqUrl, {
-        headers: {
-          'Authorization': apiKey,
-          'Accept': 'application/json',
-        },
-      });
+      const resp = await fetch(hereUrl);
 
-      if (resp.status === 401) throw new Error('invalid_key');
-      if (!resp.ok) throw new Error(`Foursquare responded ${resp.status}`);
+      if (resp.status === 401 || resp.status === 403) throw new Error('invalid_key');
+      if (!resp.ok) throw new Error(`HERE responded ${resp.status}`);
 
       const data  = await resp.json();
-      const cafes = data.results || [];
+      const cafes = data.items || [];
 
       setStatus('');
       resultsEl.classList.remove('hidden');
@@ -508,7 +501,7 @@
     } catch (err) {
       console.error(err);
       if (err.message === 'invalid_key') {
-        setStatus('Invalid API key. Check your Foursquare key and try again.', true);
+        setStatus('Invalid API key. Check your HERE key and try again.', true);
       } else {
         setStatus('Something went wrong fetching cafes. Please try again.', true);
       }
@@ -563,11 +556,11 @@
       .addTo(leafletMap)
       .bindPopup('<b>Midpoint</b>');
 
-    // Cafe markers (coffee brown) — Foursquare uses geocodes.main.latitude/longitude
+    // Cafe markers (coffee brown) — HERE uses position.lat / position.lng
     cafes.forEach(c => {
-      const lat  = c.geocodes.main.latitude;
-      const lon  = c.geocodes.main.longitude;
-      const name = c.name || 'Unnamed Cafe';
+      const lat  = c.position.lat;
+      const lon  = c.position.lng;
+      const name = c.title || 'Unnamed Cafe';
       const url  = mapsUrl(lat, lon);
       L.marker([lat, lon], { icon: divIcon('#7C3A0A', '☕') })
         .addTo(leafletMap)
@@ -579,7 +572,7 @@
       [sel.loc1.lat, sel.loc1.lng],
       [sel.loc2.lat, sel.loc2.lng],
       [mid.lat,       mid.lng],
-      ...cafes.map(c => [c.geocodes.main.latitude, c.geocodes.main.longitude]),
+      ...cafes.map(c => [c.position.lat, c.position.lng]),
     ];
     leafletMap.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
   }
@@ -594,11 +587,11 @@
     }
 
     const cards = cafes.map(c => {
-      const lat  = c.geocodes.main.latitude;
-      const lon  = c.geocodes.main.longitude;
-      const name = c.name || 'Unnamed Cafe';
+      const lat  = c.position.lat;
+      const lon  = c.position.lng;
+      const name = c.title || 'Unnamed Cafe';
       const type = c.categories?.[0]?.name || 'Cafe';
-      const addr = c.location?.formatted_address || c.location?.address || '';
+      const addr = c.address?.label || '';
       const dist = c.distance ?? haversine(mid.lat, mid.lng, lat, lon);
       const url  = mapsUrl(lat, lon);
 
