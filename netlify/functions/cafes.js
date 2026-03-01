@@ -1,3 +1,5 @@
+const https = require('https');
+
 exports.handler = async (event) => {
   const { lat, lng } = event.queryStringParameters || {};
 
@@ -10,22 +12,25 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
   }
 
-  // Note: Geoapify filter uses lon,lat order (GeoJSON)
   const url = `https://api.geoapify.com/v2/places`
     + `?categories=catering.cafe`
     + `&filter=circle:${lng},${lat},2000`
     + `&limit=20`
     + `&apiKey=${apiKey}`;
 
-  try {
-    const resp = await fetch(url);
-    const data = await resp.json();
-    return {
-      statusCode: resp.status,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    };
-  } catch (err) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to fetch cafes' }) };
-  }
+  return new Promise((resolve) => {
+    https.get(url, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        resolve({
+          statusCode: res.statusCode,
+          headers: { 'Content-Type': 'application/json' },
+          body: data,
+        });
+      });
+    }).on('error', () => {
+      resolve({ statusCode: 500, body: JSON.stringify({ error: 'Failed to fetch cafes' }) });
+    });
+  });
 };
