@@ -325,7 +325,7 @@
 
 <script>
   // ── Config ─────────────────────────────────────────────────────────────────
-  const HERE_API_KEY = 'PASTE_YOUR_HERE_KEY_HERE';
+  const GEOAPIFY_KEY = 'PASTE_YOUR_GEOAPIFY_KEY_HERE';
 
   // ── State ──────────────────────────────────────────────────────────────────
   const sel = { loc1: null, loc2: null };
@@ -458,9 +458,9 @@
   async function findCafes() {
     if (!sel.loc1 || !sel.loc2) return;
 
-    const apiKey = HERE_API_KEY;
+    const apiKey = GEOAPIFY_KEY;
     if (!apiKey || apiKey.startsWith('PASTE')) {
-      setStatus('HERE API key not configured.', true);
+      setStatus('Geoapify API key not configured.', true);
       return;
     }
 
@@ -474,20 +474,25 @@
         lng: (sel.loc1.lng + sel.loc2.lng) / 2,
       };
 
-      // HERE Discover API — category 200-2200-0000 = Coffee/Tea
-      const hereUrl = `https://discover.search.hereapi.com/v1/discover`
-        + `?at=${mid.lat},${mid.lng}`
-        + `&categories=200-2200-0000`
-        + `&limit=10`
+      // Geoapify Places API — catering.cafe + catering.coffee_shop categories
+      // Note: filter uses lon,lat order (GeoJSON)
+      const geoUrl = `https://api.geoapify.com/v2/places`
+        + `?categories=catering.cafe,catering.coffee_shop`
+        + `&filter=circle:${mid.lng},${mid.lat},2000`
+        + `&limit=20`
         + `&apiKey=${apiKey}`;
 
-      const resp = await fetch(hereUrl);
+      const resp = await fetch(geoUrl);
 
       if (resp.status === 401 || resp.status === 403) throw new Error('invalid_key');
-      if (!resp.ok) throw new Error(`HERE responded ${resp.status}`);
+      if (!resp.ok) throw new Error(`Geoapify responded ${resp.status}`);
 
       const data  = await resp.json();
-      const cafes = data.items || [];
+      const cafes = (data.features || [])
+        .map(f => f.properties)
+        .filter(p => p.name)
+        .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))
+        .slice(0, 10);
 
       setStatus('');
       resultsEl.classList.remove('hidden');
@@ -501,7 +506,7 @@
     } catch (err) {
       console.error(err);
       if (err.message === 'invalid_key') {
-        setStatus('Invalid API key. Check your HERE key and try again.', true);
+        setStatus('Invalid API key. Check your Geoapify key and try again.', true);
       } else {
         setStatus('Something went wrong fetching cafes. Please try again.', true);
       }
@@ -556,15 +561,12 @@
       .addTo(leafletMap)
       .bindPopup('<b>Midpoint</b>');
 
-    // Cafe markers (coffee brown) — HERE uses position.lat / position.lng
+    // Cafe markers — Geoapify properties have lat/lon directly
     cafes.forEach(c => {
-      const lat  = c.position.lat;
-      const lon  = c.position.lng;
-      const name = c.title || 'Unnamed Cafe';
-      const url  = mapsUrl(lat, lon);
-      L.marker([lat, lon], { icon: divIcon('#7C3A0A', '☕') })
+      const url = mapsUrl(c.lat, c.lon);
+      L.marker([c.lat, c.lon], { icon: divIcon('#7C3A0A', '☕') })
         .addTo(leafletMap)
-        .bindPopup(`<b>${esc(name)}</b><br><a href="${url}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
+        .bindPopup(`<b>${esc(c.name)}</b><br><a href="${url}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
     });
 
     // Fit all markers into view
@@ -572,7 +574,7 @@
       [sel.loc1.lat, sel.loc1.lng],
       [sel.loc2.lat, sel.loc2.lng],
       [mid.lat,       mid.lng],
-      ...cafes.map(c => [c.position.lat, c.position.lng]),
+      ...cafes.map(c => [c.lat, c.lon]),
     ];
     leafletMap.fitBounds(L.latLngBounds(allPts), { padding: [40, 40] });
   }
@@ -587,13 +589,11 @@
     }
 
     const cards = cafes.map(c => {
-      const lat  = c.position.lat;
-      const lon  = c.position.lng;
-      const name = c.title || 'Unnamed Cafe';
-      const type = c.categories?.[0]?.name || 'Cafe';
-      const addr = c.address?.label || '';
-      const dist = c.distance ?? haversine(mid.lat, mid.lng, lat, lon);
-      const url  = mapsUrl(lat, lon);
+      const name = c.name;
+      const type = c.categories?.find(cat => cat.includes('coffee')) ? 'Coffee Shop' : 'Cafe';
+      const addr = c.address_line2 || c.address_line1 || '';
+      const dist = c.distance ?? haversine(mid.lat, mid.lng, c.lat, c.lon);
+      const url  = mapsUrl(c.lat, c.lon);
 
       return `<a class="cafe-card" href="${url}" target="_blank" rel="noopener noreferrer">
         <div class="cafe-row">
