@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meet Midway — Find the perfect spot between you and your friend</title>
+  <title>Meet Midway — Find a cafe between you and your friend</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
@@ -272,18 +272,33 @@
     }
 
 
+    /* ── Cafe list scroll on desktop ── */
+    .cafe-list-wrap {
+      max-height: 520px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .cafe-list-wrap::-webkit-scrollbar { width: 4px; }
+    .cafe-list-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
     /* ── Responsive ── */
     @media (max-width: 860px) {
-      .results {
-        grid-template-columns: 1fr;
-      }
-      #map { order: -1; height: 380px; }
+      .results { grid-template-columns: 1fr; }
+      #map { order: -1; height: 340px; }
+      .cafe-list-wrap { max-height: none; overflow-y: visible; }
     }
     @media (max-width: 600px) {
       .inputs-row { grid-template-columns: 1fr; }
-      header h1 { font-size: 2rem; }
-      .input-card { padding: 1.25rem 1rem; }
-      main { padding: 1.25rem 0.75rem 2.5rem; }
+      header { padding: 1.5rem 1rem; }
+      header h1 { font-size: 1.75rem; }
+      .tagline { font-size: 0.88rem; }
+      .input-card { padding: 1rem; }
+      main { padding: 1rem 0.75rem 2rem; }
+      /* 16px prevents iOS from zooming in on input focus */
+      .ac-wrap input { font-size: 1rem; padding: 0.85rem 1rem; }
+      .find-btn { padding: 1rem; font-size: 1rem; }
+      #map { height: 260px; }
+      .cafe-card { padding: 0.85rem 1rem; }
     }
   </style>
 </head>
@@ -291,28 +306,28 @@
 
 <header>
   <h1>Meet <span class="mid">Midway</span></h1>
-  <p class="tagline">Find the perfect spot between you and your friend</p>
+  <p class="tagline">Two locations. One great cafe. Halfway.</p>
 </header>
 
 <main>
   <div class="input-card">
     <div class="inputs-row">
       <div class="input-group">
-        <label for="loc1">Your Location</label>
+        <label for="loc1">You're at</label>
         <div class="ac-wrap">
-          <input id="loc1" type="text" placeholder="Search your location…" autocomplete="off" spellcheck="false" />
+          <input id="loc1" type="text" placeholder="Search a place or area…" autocomplete="off" spellcheck="false" />
           <div id="dd1" class="dropdown"></div>
         </div>
       </div>
       <div class="input-group">
-        <label for="loc2">Friend's Location</label>
+        <label for="loc2">They're at</label>
         <div class="ac-wrap">
-          <input id="loc2" type="text" placeholder="Search friend's location…" autocomplete="off" spellcheck="false" />
+          <input id="loc2" type="text" placeholder="Search a place or area…" autocomplete="off" spellcheck="false" />
           <div id="dd2" class="dropdown"></div>
         </div>
       </div>
     </div>
-    <button class="find-btn" id="findBtn" disabled>Find Cafes</button>
+    <button class="find-btn" id="findBtn" disabled>Find cafes in the middle</button>
   </div>
 
   <div id="status"></div>
@@ -466,7 +481,7 @@
 
     findBtn.disabled = true;
     resultsEl.classList.add('hidden');
-    setStatus('<span class="spinner"></span> Finding cafes near your midpoint…');
+    setStatus('<span class="spinner"></span> Looking for cafes halfway between you…');
 
     try {
       const mid = {
@@ -549,17 +564,17 @@
     // Person A marker (blue)
     L.marker([sel.loc1.lat, sel.loc1.lng], { icon: divIcon('#1D4ED8', 'A') })
       .addTo(leafletMap)
-      .bindPopup(`<b>Your Location</b><br>${esc(sel.loc1.label)}`);
+      .bindPopup(`<b>You</b><br>${esc(sel.loc1.label)}`);
 
     // Person B marker (green)
     L.marker([sel.loc2.lat, sel.loc2.lng], { icon: divIcon('#15803D', 'B') })
       .addTo(leafletMap)
-      .bindPopup(`<b>Friend's Location</b><br>${esc(sel.loc2.label)}`);
+      .bindPopup(`<b>Your friend</b><br>${esc(sel.loc2.label)}`);
 
     // Midpoint marker (amber)
     L.marker([mid.lat, mid.lng], { icon: divIcon('#B45309', '★') })
       .addTo(leafletMap)
-      .bindPopup('<b>Midpoint</b>');
+      .bindPopup('<b>Meet here</b>');
 
     // Cafe markers — Geoapify properties have lat/lon directly
     cafes.forEach(c => {
@@ -583,7 +598,7 @@
   function renderList(cafes, mid) {
     if (!cafes.length) {
       cafeListEl.innerHTML = `<div class="no-results">
-        ☕ No cafes found nearby.<br>Try a different meeting point.
+        No cafes found in this area.<br>Try different locations.
       </div>`;
       return;
     }
@@ -602,15 +617,15 @@
         </div>
         <div class="cafe-type">${esc(type)}</div>
         ${addr ? `<div class="cafe-addr">📍 ${esc(addr)}</div>` : ''}
-        <div class="maps-hint">↗ Open in Google Maps</div>
+        <div class="maps-hint">View on Google Maps →</div>
       </a>`;
     }).join('');
 
     cafeListEl.innerHTML = `
       <div class="list-header">
-        Nearby Cafes <span class="count">(${cafes.length} found)</span>
+        Cafes near the middle <span class="count">${cafes.length} spots</span>
       </div>
-      <div class="cafe-list">${cards}</div>
+      <div class="cafe-list-wrap"><div class="cafe-list">${cards}</div></div>
     `;
   }
 </script>
