@@ -6,7 +6,6 @@
   <title>Meet Midway — Find the perfect spot between you and your friend</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="config.js"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -325,6 +324,9 @@
 </main>
 
 <script>
+  // ── Config ─────────────────────────────────────────────────────────────────
+  const FSQ_API_KEY = 'PYPHW4XSRPDOU41WWQM3CWPSPH0YDWQDZOMWEF1SKVGPARSV';
+
   // ── State ──────────────────────────────────────────────────────────────────
   const sel = { loc1: null, loc2: null };
   let leafletMap = null;
@@ -456,7 +458,7 @@
   async function findCafes() {
     if (!sel.loc1 || !sel.loc2) return;
 
-    const apiKey = window.FSQ_API_KEY;
+    const apiKey = FSQ_API_KEY;
     if (!apiKey) {
       setStatus('API key not configured. Add it to config.js.', true);
       return;
