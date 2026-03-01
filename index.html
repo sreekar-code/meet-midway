@@ -222,28 +222,12 @@
       box-shadow: 0 5px 18px var(--shadow-md);
       border-color: var(--accent);
     }
-    .cafe-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 0.5rem;
-      margin-bottom: 0.2rem;
-    }
+    .cafe-name { margin-bottom: 0.15rem; }
     .cafe-name {
       font-size: 0.92rem;
       font-weight: 700;
       color: var(--text);
       line-height: 1.3;
-    }
-    .cafe-dist {
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: var(--accent);
-      background: var(--accent-light);
-      padding: 2px 8px;
-      border-radius: 20px;
-      white-space: nowrap;
-      flex-shrink: 0;
     }
     .cafe-type {
       font-size: 0.75rem;
@@ -339,8 +323,6 @@
 </main>
 
 <script>
-  // ── Config ─────────────────────────────────────────────────────────────────
-  const GEOAPIFY_KEY = 'c1d41e8976144eac8f896968c478f095';
 
   // ── State ──────────────────────────────────────────────────────────────────
   const sel = { loc1: null, loc2: null };
@@ -473,12 +455,6 @@
   async function findCafes() {
     if (!sel.loc1 || !sel.loc2) return;
 
-    const apiKey = GEOAPIFY_KEY;
-    if (!apiKey || apiKey.startsWith('PASTE')) {
-      setStatus('Geoapify API key not configured.', true);
-      return;
-    }
-
     findBtn.disabled = true;
     resultsEl.classList.add('hidden');
     setStatus('<span class="spinner"></span> Looking for cafes halfway between you…');
@@ -489,18 +465,10 @@
         lng: (sel.loc1.lng + sel.loc2.lng) / 2,
       };
 
-      // Geoapify Places API — catering.cafe + catering.coffee_shop categories
-      // Note: filter uses lon,lat order (GeoJSON)
-      const geoUrl = `https://api.geoapify.com/v2/places`
-        + `?categories=catering.cafe`
-        + `&filter=circle:${mid.lng},${mid.lat},2000`
-        + `&limit=20`
-        + `&apiKey=${apiKey}`;
+      const resp = await fetch(`/.netlify/functions/cafes?lat=${mid.lat}&lng=${mid.lng}`);
 
-      const resp = await fetch(geoUrl);
-
-      if (resp.status === 401 || resp.status === 403) throw new Error('invalid_key');
-      if (!resp.ok) throw new Error(`Geoapify responded ${resp.status}`);
+      if (resp.status === 500) throw new Error('server_error');
+      if (!resp.ok) throw new Error(`cafes responded ${resp.status}`);
 
       const data  = await resp.json();
       const cafes = (data.features || [])
@@ -515,16 +483,12 @@
       // Leaflet needs the div to be visible before init
       requestAnimationFrame(() => {
         initMap(mid, cafes);
-        renderList(cafes, mid);
+        renderList(cafes);
       });
 
     } catch (err) {
       console.error(err);
-      if (err.message === 'invalid_key') {
-        setStatus('Invalid API key. Check your Geoapify key and try again.', true);
-      } else {
-        setStatus('Something went wrong fetching cafes. Please try again.', true);
-      }
+      setStatus('Something went wrong. Please try again.', true);
     } finally {
       findBtn.disabled = false;
     }
@@ -595,7 +559,7 @@
   }
 
   // ── Cafe list ──────────────────────────────────────────────────────────────
-  function renderList(cafes, mid) {
+  function renderList(cafes) {
     if (!cafes.length) {
       cafeListEl.innerHTML = `<div class="no-results">
         No cafes found in this area.<br>Try different locations.
@@ -607,14 +571,10 @@
       const name = c.name;
       const type = c.categories?.find(cat => cat.includes('coffee')) ? 'Coffee Shop' : 'Cafe';
       const addr = c.address_line2 || c.address_line1 || '';
-      const dist = c.distance ?? haversine(mid.lat, mid.lng, c.lat, c.lon);
       const url  = mapsUrl(c.lat, c.lon);
 
       return `<a class="cafe-card" href="${url}" target="_blank" rel="noopener noreferrer">
-        <div class="cafe-row">
-          <div class="cafe-name">${esc(name)}</div>
-          <div class="cafe-dist">${fmtDist(dist)}</div>
-        </div>
+        <div class="cafe-name">${esc(name)}</div>
         <div class="cafe-type">${esc(type)}</div>
         ${addr ? `<div class="cafe-addr">📍 ${esc(addr)}</div>` : ''}
         <div class="maps-hint">View on Google Maps →</div>
